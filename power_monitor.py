@@ -58,33 +58,38 @@ class PowerMonitor:
     def read_measurements(self):
         """Read current, voltage, and power from INA219"""
         try:
-            # bus_voltage is the voltage across the load (V+ to V-)
-            # This is already the load voltage we want
+            # bus_voltage: voltage on V- (load side), between V- and GND
             bus_voltage = self.ina.bus_voltage
             
-            # shunt_voltage is the voltage drop across the shunt resistor
-            # Used internally by INA219 to calculate current
+            # shunt_voltage: voltage drop across shunt resistor (between V+ and V-)
             shunt_voltage = self.ina.shunt_voltage
+            
+            # Supply voltage (VIN+) = bus_voltage + shunt_voltage
+            # This is the total input voltage from the power supply
+            supply_voltage = bus_voltage + shunt_voltage
             
             # Current is returned in milliamps, convert to Amps
             current = self.ina.current / 1000.0
             
-            # Calculate power manually: P = V * I
-            # bus_voltage is the load voltage, so use it directly
-            power = bus_voltage * current
+            # Calculate power: P = V * I
+            # Use supply voltage for accurate power calculation
+            power = supply_voltage * current
             
             # Try to get power from library as well (for comparison)
             try:
                 library_power = self.ina.power / 1000.0  # Convert mW to W
+                # Use library power if it's non-zero, otherwise use calculated
+                if library_power > 0:
+                    power = library_power
             except:
-                library_power = power  # Fallback to calculated power
+                pass  # Use calculated power
             
             return {
-                'voltage': bus_voltage,  # bus_voltage IS the load voltage
+                'voltage': supply_voltage,  # Supply voltage (VIN+) = bus + shunt
                 'current': current,
-                'power': power,  # Use calculated power
-                'bus_voltage': bus_voltage,
-                'shunt_voltage': shunt_voltage
+                'power': power,
+                'bus_voltage': bus_voltage,  # Load side voltage (V-)
+                'shunt_voltage': shunt_voltage  # Voltage drop across shunt
             }
         except Exception as e:
             logging.error(f"Error reading measurements: {e}")
