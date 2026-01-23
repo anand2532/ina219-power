@@ -35,17 +35,22 @@ class PowerMonitor:
             # Initialize I2C bus
             i2c = busio.I2C(board.SCL, board.SDA)
             
-            # Initialize INA219 with 100mΩ shunt
-            self.ina = INA219(i2c, shunt_ohms=SHUNT_OHMS)
+            # Initialize INA219
+            # Note: Library assumes 0.1Ω shunt resistor by default (which matches R100)
+            self.ina = INA219(i2c)
             
-            # Configure ADC resolution for better accuracy
-            self.ina.bus_adc_resolution = ADCResolution.ADCRES_12BIT_32S
-            self.ina.shunt_adc_resolution = ADCResolution.ADCRES_12BIT_32S
-            
-            # Set bus voltage range
-            self.ina.bus_voltage_range = BusVoltageRange.RANGE_16V
+            # Configure ADC resolution and voltage range (if supported)
+            try:
+                self.ina.bus_adc_resolution = ADCResolution.ADCRES_12BIT_32S
+                self.ina.shunt_adc_resolution = ADCResolution.ADCRES_12BIT_32S
+                self.ina.bus_voltage_range = BusVoltageRange.RANGE_16V
+            except AttributeError:
+                # Some library versions may not support these attributes
+                # Default settings will be used
+                logging.info("Using default INA219 configuration")
             
             logging.info("INA219 initialized successfully")
+            logging.info(f"Using default 0.1Ω shunt resistor (R100)")
         except Exception as e:
             logging.error(f"Failed to initialize INA219: {e}")
             raise
