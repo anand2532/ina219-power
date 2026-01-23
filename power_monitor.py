@@ -17,6 +17,7 @@ SHUNT_OHMS = 0.1  # 100mΩ shunt resistor (R100)
 LOG_FILE = "power_consumption.log"
 SUMMARY_INTERVAL = 600  # 10 minutes in seconds
 READ_INTERVAL = 1  # Read every 1 second
+MANUAL_VOLTAGE = 5.008  # Manual voltage override (set to None to use sensor reading, or value like 5.008, 4.996, etc.)
 
 # Setup logging
 logging.basicConfig(
@@ -51,6 +52,10 @@ class PowerMonitor:
             
             logging.info("INA219 initialized successfully")
             logging.info(f"Using default 0.1Ω shunt resistor (R100)")
+            if MANUAL_VOLTAGE is not None:
+                logging.info(f"Using manual voltage override: {MANUAL_VOLTAGE}V")
+            else:
+                logging.info("Using sensor voltage reading")
         except Exception as e:
             logging.error(f"Failed to initialize INA219: {e}")
             raise
@@ -67,6 +72,10 @@ class PowerMonitor:
             # Supply voltage (VIN+) = bus_voltage + shunt_voltage
             # This is the total input voltage from the power supply
             supply_voltage = bus_voltage + shunt_voltage
+            
+            # Use manual voltage if configured, otherwise use sensor reading
+            if MANUAL_VOLTAGE is not None:
+                supply_voltage = MANUAL_VOLTAGE
             
             # Current is returned in milliamps, convert to Amps
             current = self.ina.current / 1000.0
