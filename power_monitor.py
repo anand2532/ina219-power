@@ -58,18 +58,31 @@ class PowerMonitor:
     def read_measurements(self):
         """Read current, voltage, and power from INA219"""
         try:
-            bus_voltage = self.ina.bus_voltage  # Voltage across V+ and V-
-            shunt_voltage = self.ina.shunt_voltage  # Voltage across shunt resistor
-            current = self.ina.current / 1000.0  # Convert mA to A
-            power = self.ina.power / 1000.0  # Convert mW to W
+            # bus_voltage is the voltage across the load (V+ to V-)
+            # This is already the load voltage we want
+            bus_voltage = self.ina.bus_voltage
             
-            # Calculate actual load voltage (bus voltage minus shunt voltage)
-            load_voltage = bus_voltage - shunt_voltage
+            # shunt_voltage is the voltage drop across the shunt resistor
+            # Used internally by INA219 to calculate current
+            shunt_voltage = self.ina.shunt_voltage
+            
+            # Current is returned in milliamps, convert to Amps
+            current = self.ina.current / 1000.0
+            
+            # Calculate power manually: P = V * I
+            # bus_voltage is the load voltage, so use it directly
+            power = bus_voltage * current
+            
+            # Try to get power from library as well (for comparison)
+            try:
+                library_power = self.ina.power / 1000.0  # Convert mW to W
+            except:
+                library_power = power  # Fallback to calculated power
             
             return {
-                'voltage': load_voltage,
+                'voltage': bus_voltage,  # bus_voltage IS the load voltage
                 'current': current,
-                'power': power,
+                'power': power,  # Use calculated power
                 'bus_voltage': bus_voltage,
                 'shunt_voltage': shunt_voltage
             }
