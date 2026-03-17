@@ -199,5 +199,13 @@ def create_app(*, log_dir: str, tail_lines: int, debug: bool) -> web.Application
 
 def run_server(*, host: str, port: int, log_dir: str, tail_lines: int, debug: bool) -> None:
     app = create_app(log_dir=log_dir, tail_lines=tail_lines, debug=debug)
-    web.run_app(app, host=host, port=port, access_log=None if not debug else "aiohttp.access")
+    # When embedded in another process (we run this in a background thread),
+    # aiohttp must not install signal handlers.
+    web.run_app(
+        app,
+        host=host,
+        port=port,
+        access_log=None if not debug else "aiohttp.access",
+        handle_signals=False,
+    )
 
