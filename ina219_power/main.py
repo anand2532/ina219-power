@@ -113,7 +113,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--log-dir", type=str, default=None, help="Override log directory")
     parser.add_argument("--serve", action="store_true", help="Serve a live tail of CSV logs over HTTP")
     parser.add_argument("--http-host", default="0.0.0.0", help="HTTP bind host (default 0.0.0.0)")
-    parser.add_argument("--http-port", type=int, default=80, help="HTTP port (default 80)")
+    parser.add_argument("--http-port", type=int, default=8080, help="HTTP port (default 8080)")
     parser.add_argument("--tail-lines", type=int, default=50, help="Number of last lines to show on connect")
     args = parser.parse_args(argv)
 

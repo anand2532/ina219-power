@@ -67,7 +67,7 @@ This project can serve a tiny web page that streams (“tails”) today’s CSV 
 ### 1) Run the web tail server
 Run the monitor with `--serve`:
 ```bash
-python3 -m ina219_power.main --config ./config.json --serve --http-host 0.0.0.0 --http-port 80
+python3 -m ina219_power.main --config ./config.json --serve --http-host 0.0.0.0 --http-port 8080
 ```
 
 ### 2) Create an always-on hotspot (NetworkManager)
@@ -82,7 +82,7 @@ sudo nmcli con up ina219-hotspot
 ```
 
 Now connect your phone to Wi‑Fi `INA219-LOGS` and open:
-- `http://192.168.4.1/`
+- `http://192.168.4.1:8080/`
 
 ### 3) Optional: systemd service to bring up hotspot on boot
 After the `ina219-hotspot` connection exists, install the helper unit:
