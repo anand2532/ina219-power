@@ -1,0 +1,12 @@
+[Unit]
+Description=INA219 Hotspot (NetworkManager)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/nmcli connection up ina219-hotspot
+
+[Install]
+WantedBy=multi-user.target

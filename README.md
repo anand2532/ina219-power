@@ -61,6 +61,37 @@ Enable debug logging:
 python3 -m ina219_power.main --config ./config.json --debug
 ```
 
+## Real-time logs on your phone (hotspot + web page)
+This project can serve a tiny web page that streams (“tails”) today’s CSV in real time.
+
+### 1) Run the web tail server
+Run the monitor with `--serve`:
+```bash
+python3 -m ina219_power.main --config ./config.json --serve --http-host 0.0.0.0 --http-port 80
+```
+
+### 2) Create an always-on hotspot (NetworkManager)
+This creates a Wi‑Fi AP **SSID** `INA219-LOGS` on `wlan0` with gateway IP **192.168.4.1**.
+
+Pick a password and run:
+```bash
+sudo nmcli con add type wifi ifname wlan0 con-name ina219-hotspot autoconnect yes ssid "INA219-LOGS"
+sudo nmcli con modify ina219-hotspot 802-11-wireless.mode ap 802-11-wireless.band bg ipv4.method shared ipv4.addresses 192.168.4.1/24
+sudo nmcli con modify ina219-hotspot wifi-sec.key-mgmt wpa-psk wifi-sec.psk "CHANGE_ME_PASSWORD"
+sudo nmcli con up ina219-hotspot
+```
+
+Now connect your phone to Wi‑Fi `INA219-LOGS` and open:
+- `http://192.168.4.1/`
+
+### 3) Optional: systemd service to bring up hotspot on boot
+After the `ina219-hotspot` connection exists, install the helper unit:
+```bash
+sudo cp ./systemd/ina219-hotspot.service /etc/systemd/system/ina219-hotspot.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ina219-hotspot.service
+```
+
 ## Logs
 - Logs are written to `log_dir` (default `./logs`)
 - A new CSV is created per day: `YYYY-MM-DD.csv`
@@ -68,22 +99,26 @@ python3 -m ina219_power.main --config ./config.json --debug
 
 ## Install as a systemd service (auto-start on boot)
 
-### Suggested install paths
-- Project: `/opt/ina219-power`
-- Config: `/etc/ina219-power/config.json`
+### Simple service (keep files where they are)
+This setup keeps the repo in place (for example `~/ina219-power`) and the service just points to your paths.
 
-### Copy files
+1) Make sure your venv exists in the project directory:
 ```bash
-sudo mkdir -p /opt/ina219-power
-sudo rsync -a --delete ./ /opt/ina219-power/
-
-sudo mkdir -p /etc/ina219-power
-sudo cp /opt/ina219-power/config.json /etc/ina219-power/config.json
+cd ~/ina219-power
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
+
+2) Edit the unit template and set the correct paths:
+- In [`systemd/ina219-power.service`](systemd/ina219-power.service), update:
+  - `WorkingDirectory=/home/<user>/ina219-power`
+  - `ExecStart=/home/<user>/ina219-power/.venv/bin/python -m ina219_power.main --config /home/<user>/ina219-power/config.json`
 
 ### Install the unit
 ```bash
-sudo cp /opt/ina219-power/systemd/ina219-power.service /etc/systemd/system/ina219-power.service
+sudo cp ./systemd/ina219-power.service /etc/systemd/system/ina219-power.service
 sudo systemctl daemon-reload
 sudo systemctl enable --now ina219-power.service
 ```
@@ -96,7 +131,8 @@ sudo journalctl -u ina219-power.service -f
 ### Troubleshooting
 - **No device at `0x40`**: run `sudo i2cdetect -y 1` and confirm the detected address; update `i2c_address` in config (supports `"0x40"` style).
 - **Permission errors (non-root service)**: ensure the service user is in the `i2c` group (then log out/in) and update `User=` in the unit file.
-- **Service is running but no CSV appears**: check `log_dir` and make sure it’s writable for the service user. With the provided unit, relative paths are resolved under `WorkingDirectory=/opt/ina219-power`.
+- **Service is running but no CSV appears**: check `log_dir` and make sure it’s writable for the service user. With the provided unit, relative paths are resolved under `WorkingDirectory=` from the unit file.
+- **Hotspot web page not opening**: confirm you can `ping 192.168.4.1` from the phone and that the monitor is started with `--serve` (or that `ExecStart` includes it in the service file).
 - **Viewing logs**: `sudo journalctl -u ina219-power.service -f`.
 
 ### Run as non-root (optional)

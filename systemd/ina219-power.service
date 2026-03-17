@@ -5,8 +5,10 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/ina219-power
-ExecStart=/usr/bin/python3 -m ina219_power.main --config /etc/ina219-power/config.json
+# Keep the project where it is (e.g. /home/<user>/ina219-power) and point systemd to it.
+# Update these two paths to match your install location.
+WorkingDirectory=/home/vyom/ina219-power
+ExecStart=/home/vyom/ina219-power/.venv/bin/python -m ina219_power.main --config /home/pi/ina219-power/config.json --serve --http-host 0.0.0.0 --http-port 80
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1

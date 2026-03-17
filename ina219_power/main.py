@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import signal
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from typing import Any, Optional
 
 from .logger import CSVLogger, LogRow
 from .sensor import INA219Reading, INA219Sensor
+from .web_tail import run_server
 
 
 def _parse_i2c_address(value: str) -> int:
@@ -109,6 +111,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--interval", type=float, default=None, help="Override sampling interval in seconds")
     parser.add_argument("--i2c-address", type=str, default=None, help='Override I2C address (e.g. "0x40")')
     parser.add_argument("--log-dir", type=str, default=None, help="Override log directory")
+    parser.add_argument("--serve", action="store_true", help="Serve a live tail of CSV logs over HTTP")
+    parser.add_argument("--http-host", default="0.0.0.0", help="HTTP bind host (default 0.0.0.0)")
+    parser.add_argument("--http-port", type=int, default=80, help="HTTP port (default 80)")
+    parser.add_argument("--tail-lines", type=int, default=50, help="Number of last lines to show on connect")
     args = parser.parse_args(argv)
 
     cfg_path = Path(args.config)
@@ -140,6 +146,22 @@ def main(argv: Optional[list[str]] = None) -> int:
         max_bytes=cfg.rotation_max_bytes,
         debug=debug,
     )
+
+    if args.serve:
+        t = threading.Thread(
+            target=run_server,
+            kwargs={
+                "host": str(args.http_host),
+                "port": int(args.http_port),
+                "log_dir": cfg.log_dir,
+                "tail_lines": int(args.tail_lines),
+                "debug": debug,
+            },
+            daemon=True,
+        )
+        t.start()
+        if debug:
+            print(f"[main] web tail at http://{args.http_host}:{args.http_port}/", flush=True)
 
     stop_flag = _StopFlag()
 

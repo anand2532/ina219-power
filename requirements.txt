@@ -1,2 +1,3 @@
 adafruit-blinka>=8.40.0
 adafruit-circuitpython-ina219>=3.4.22
+aiohttp>=3.9.5
