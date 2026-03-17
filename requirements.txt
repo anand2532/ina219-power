@@ -1,2 +1,2 @@
-adafruit-circuitpython-ina219
-adafruit-blinka
+adafruit-blinka>=8.40.0
+adafruit-circuitpython-ina219>=3.4.22

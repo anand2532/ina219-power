@@ -1,173 +1,100 @@
-# INA219 Power Monitor for Raspberry Pi 4B
+# INA219 Power Monitor (Raspberry Pi)
 
-This project monitors power consumption using an INA219 current/power monitor with a 100mΩ (R100) shunt resistor connected to a Raspberry Pi 4B via I2C.
+Production-ready Python project for Raspberry Pi 4B+ using an INA219 (CJMCU-219) I2C sensor to measure real-time voltage/current/power, accumulate energy (Wh), and log to daily CSV files.
 
-## Features
+## Hardware wiring (typical)
+- **VCC** → 3.3V
+- **GND** → GND
+- **SDA** → GPIO2 (SDA)
+- **SCL** → GPIO3 (SCL)
 
-- Real-time power, current, and voltage monitoring
-- Continuous logging to file
-- 10-minute summary statistics
-- Simple and easy to use
+## Raspberry Pi setup
 
-## Hardware Requirements
+### Enable I2C
+- `sudo raspi-config` → **Interface Options** → **I2C** → Enable
+- Reboot if prompted
 
-- Raspberry Pi 4B
-- INA219 Current/Power Monitor Breakout Board
-- 100mΩ (0.1Ω) shunt resistor (R100)
-- Jumper wires for I2C connection
-
-## Hardware Connections
-
-Connect the INA219 to your Raspberry Pi 4B as follows:
-
-### INA219 Pin Connections
-
-| INA219 Pin | Raspberry Pi 4B Pin | Description |
-|------------|---------------------|-------------|
-| VCC        | Pin 1 (3.3V)        | Power supply |
-| GND        | Pin 6 (GND)         | Ground |
-| SDA        | Pin 3 (GPIO 2, SDA) | I2C Data line |
-| SCL        | Pin 5 (GPIO 3, SCL) | I2C Clock line |
-
-### Power Measurement Setup
-
-1. **Shunt Resistor**: The INA219 uses a 100mΩ (0.1Ω) shunt resistor (R100) that is typically built into the breakout board.
-
-2. **Load Connection**:
-   - Connect your **load's positive terminal** to **VIN+** on the INA219
-   - Connect your **load's negative terminal** to **VIN-** on the INA219
-   - The INA219 measures the voltage drop across the shunt resistor to calculate current
-
-3. **Power Supply**:
-   - The INA219 itself needs 3.3V power (from Pi pin 1)
-   - Your load can be powered separately (up to 26V for INA219)
-
-### Pin Layout Reference (Raspberry Pi 4B)
-
-```
-    3.3V  [1]  [2]  5V
-    SDA   [3]  [4]  5V
-    SCL   [5]  [6]  GND
-    ...
-```
-
-## Software Setup
-
-### 1. Enable I2C on Raspberry Pi
-
-```bash
-sudo raspi-config
-```
-
-Navigate to:
-- **Interface Options** → **I2C** → **Yes** to enable
-
-Alternatively, enable via command line:
+### Install OS packages
 ```bash
 sudo apt-get update
-sudo apt-get install -y i2c-tools
-sudo raspi-config nonint do_i2c 0
+sudo apt-get install -y python3 python3-pip i2c-tools
 ```
 
-### 2. Verify I2C Connection
-
-Check if INA219 is detected (default address is 0x40):
+### Verify the sensor is visible
 ```bash
 sudo i2cdetect -y 1
 ```
+You should see `40` (default INA219 address) unless you changed it.
 
-You should see `40` in the output if the connection is correct.
-
-### 3. Install Python Dependencies
-
+## Install Python dependencies
+From the project directory:
 ```bash
-pip3 install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
-Or install manually:
+## Configure
+Edit [`config.json`](config.json). Key options:
+- `sampling_interval_s`: print/log interval (default `1.0`)
+- `i2c_bus`: typically `1` on Raspberry Pi
+- `i2c_address`: hex string like `"0x40"`
+- `shunt_ohms`: typically `0.1` on CJMCU-219 boards
+- `max_expected_amps`: calibration target (default `3.2`)
+- `log_dir`: default `./logs`
+- `max_dt_s`: clamps large time gaps for energy integration
+- `csv_rotation.max_bytes`: optional size-based rollover (in addition to daily files)
+
+## Run manually
 ```bash
-pip3 install adafruit-circuitpython-ina219 adafruit-blinka
+python3 -m ina219_power.main --config ./config.json
 ```
 
-### 4. Run the Power Monitor
-
+Enable debug logging:
 ```bash
-python3 power_monitor.py
+python3 -m ina219_power.main --config ./config.json --debug
 ```
 
-Or make it executable and run directly:
+## Logs
+- Logs are written to `log_dir` (default `./logs`)
+- A new CSV is created per day: `YYYY-MM-DD.csv`
+- Optional size-based rollover creates `YYYY-MM-DD_001.csv`, etc.
+
+## Install as a systemd service (auto-start on boot)
+
+### Suggested install paths
+- Project: `/opt/ina219-power`
+- Config: `/etc/ina219-power/config.json`
+
+### Copy files
 ```bash
-chmod +x power_monitor.py
-./power_monitor.py
+sudo mkdir -p /opt/ina219-power
+sudo rsync -a --delete ./ /opt/ina219-power/
+
+sudo mkdir -p /etc/ina219-power
+sudo cp /opt/ina219-power/config.json /etc/ina219-power/config.json
 ```
 
-## Usage
-
-The script will:
-- Read power, current, and voltage every second
-- Log all measurements to `power_consumption.log`
-- Display real-time readings in the console
-- Generate a 10-minute summary with:
-  - Average voltage, current, and power
-  - Minimum and maximum power
-  - Total energy consumed (Wh)
-  - Number of samples collected
-
-### Example Output
-
-**Real-time logging:**
-```
-2026-01-23 10:15:30 - INFO - Time: 2026-01-23 10:15:30 | Voltage: 5.123V | Current: 0.456A | Power: 2.336W
+### Install the unit
+```bash
+sudo cp /opt/ina219-power/systemd/ina219-power.service /etc/systemd/system/ina219-power.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now ina219-power.service
 ```
 
-**10-minute summary:**
-```
-============================================================
-10-MINUTE SUMMARY (2026-01-23 10:25:30)
-============================================================
-Average Voltage:     5.120 V
-Average Current:     0.455 A
-Average Power:       2.330 W
-Minimum Power:       2.100 W
-Maximum Power:       2.500 W
-Total Energy:        0.388 Wh
-Samples Collected:  600
-============================================================
+### View service logs
+```bash
+sudo journalctl -u ina219-power.service -f
 ```
 
-## Stopping the Monitor
+### Troubleshooting
+- **No device at `0x40`**: run `sudo i2cdetect -y 1` and confirm the detected address; update `i2c_address` in config (supports `"0x40"` style).
+- **Permission errors (non-root service)**: ensure the service user is in the `i2c` group (then log out/in) and update `User=` in the unit file.
+- **Service is running but no CSV appears**: check `log_dir` and make sure it’s writable for the service user. With the provided unit, relative paths are resolved under `WorkingDirectory=/opt/ina219-power`.
+- **Viewing logs**: `sudo journalctl -u ina219-power.service -f`.
 
-Press `Ctrl+C` to stop monitoring. The script will generate a final summary before exiting.
+### Run as non-root (optional)
+If you prefer not to run as root, create/use a user in the `i2c` group:
+```bash
+sudo usermod -aG i2c pi
+```
+Then edit the unit file `User=` accordingly.
 
-## Log Files
-
-All measurements are logged to `power_consumption.log` in the same directory. The log file includes timestamps and can be analyzed later.
-
-## Troubleshooting
-
-### INA219 not detected
-- Check I2C connections (SDA, SCL)
-- Verify I2C is enabled: `sudo raspi-config`
-- Check wiring with `sudo i2cdetect -y 1`
-- Ensure 3.3V power is connected
-
-### Permission errors
-- Run with `sudo` if needed: `sudo python3 power_monitor.py`
-- Add user to i2c group: `sudo usermod -aG i2c $USER` (then logout/login)
-
-### Incorrect readings
-- Verify shunt resistor value (should be 0.1Ω)
-- Check load connections (VIN+ and VIN-)
-- Ensure load voltage is within INA219 range (0-26V)
-
-## Configuration
-
-You can modify these constants in `power_monitor.py`:
-- `SHUNT_OHMS`: Shunt resistor value (default: 0.1Ω)
-- `SUMMARY_INTERVAL`: Time between summaries in seconds (default: 600 = 10 minutes)
-- `READ_INTERVAL`: Time between readings in seconds (default: 1)
-- `LOG_FILE`: Log file name (default: "power_consumption.log")
-
-## License
-
-This project is provided as-is for educational and personal use.

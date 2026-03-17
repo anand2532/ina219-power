@@ -1,0 +1,15 @@
+[Unit]
+Description=INA219 Power Monitor
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ina219-power
+ExecStart=/usr/bin/python3 -m ina219_power.main --config /etc/ina219-power/config.json
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
