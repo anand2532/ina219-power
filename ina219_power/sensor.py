@@ -78,12 +78,31 @@ class INA219Sensor:
         if locked:
             i2c.unlock()
 
-        self._sensor = INA219(
-            i2c,
-            addr=self._i2c_address,
-            shunt_ohms=self._shunt_ohms,
-            max_expected_amps=self._max_expected_amps,
-        )
+        try:
+            # Prefer newer-style drivers (if supported).
+            self._sensor = INA219(
+                i2c,
+                addr=self._i2c_address,
+                shunt_ohms=self._shunt_ohms,
+                max_expected_amps=self._max_expected_amps,
+            )  # type: ignore[call-arg]
+            return
+        except TypeError:
+            # Older/stable Adafruit API: INA219(i2c_bus, addr=0x40) + set_calibration_* methods.
+            self._sensor = INA219(i2c, addr=self._i2c_address)  # type: ignore[call-arg]
+
+            # Adafruit's built-in calibration helpers assume a 0.1Ω shunt.
+            if abs(self._shunt_ohms - 0.1) > 1e-6:
+                self._log(
+                    f"warning: Adafruit INA219 calibration helpers assume 0.1Ω shunt; "
+                    f"configured shunt_ohms={self._shunt_ohms} may reduce accuracy"
+                )
+
+            # Pick the closest built-in calibration.
+            if self._max_expected_amps <= 1.0 and hasattr(self._sensor, "set_calibration_32V_1A"):
+                self._sensor.set_calibration_32V_1A()
+            elif hasattr(self._sensor, "set_calibration_32V_2A"):
+                self._sensor.set_calibration_32V_2A()
 
     def read(self) -> INA219Reading:
         """
