@@ -17,7 +17,7 @@ Production-ready Python project for Raspberry Pi 4B+ using an INA219 (CJMCU-219)
 ### Install OS packages
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3 python3-pip i2c-tools
+sudo apt-get install -y python3 python3-pip python3-venv i2c-tools
 ```
 
 ### Verify the sensor is visible
@@ -27,9 +27,17 @@ sudo i2cdetect -y 1
 You should see `40` (default INA219 address) unless you changed it.
 
 ## Install Python dependencies
-From the project directory:
+From the project directory (recommended: use a virtual environment):
 ```bash
-python3 -m pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+If you *intentionally* want to install into the system Python (not recommended), you can use:
+```bash
+python3 -m pip install --break-system-packages -r requirements.txt
 ```
 
 ## Configure
