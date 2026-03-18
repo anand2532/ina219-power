@@ -8,7 +8,18 @@ User=root
 # Keep the project where it is (e.g. /home/<user>/ina219-power) and point systemd to it.
 # Update these two paths to match your install location.
 WorkingDirectory=/home/vyom/ina219-power
-ExecStart=/home/vyom/ina219-power/.venv/bin/python -m ina219_power.main --config /home/pi/ina219-power/config.json --serve --http-host 0.0.0.0 --http-port 80
+ExecStart=/home/vyom/ina219-power/.venv/bin/python -m ina219_power.main --config /home/vyom/ina219-power/config.json --serve --http-host 0.0.0.0 --http-port 8080
+Restart=on-failure
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/vyom/ina219-power
+ExecStart=/home/vyom/ina219-power/.venv/bin/python -m ina219_power.main --config /home/vyom/ina219-power/config.json --serve --http-host 0.0.0.0 --http-port 8080
 Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1
