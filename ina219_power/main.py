@@ -189,7 +189,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
             try:
                 reading = sensor.read()
-                energy_wh += reading.power_w * dt / 3600.0
+                delta_energy_wh = reading.power_w * dt / 3600.0
+                energy_wh += delta_energy_wh
 
                 _print_reading(reading, energy_wh)
 
@@ -199,6 +200,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                         voltage_v=reading.bus_voltage_v,
                         current_ma=reading.current_ma,
                         power_w=reading.power_w,
+                        delta_energy_wh=delta_energy_wh,
                         cumulative_energy_wh=energy_wh,
                     )
                 )
