@@ -13,6 +13,7 @@ DEFAULT_FIELDS = [
     "voltage_v",
     "current_ma",
     "power_w",
+    "delta_energy_wh",
     "cumulative_energy_wh",
 ]
 
@@ -23,6 +24,7 @@ class LogRow:
     voltage_v: float
     current_ma: float
     power_w: float
+    delta_energy_wh: float
     cumulative_energy_wh: float
 
 
@@ -150,6 +152,7 @@ class CSVLogger:
                 "voltage_v": f"{row.voltage_v:.6f}",
                 "current_ma": f"{row.current_ma:.6f}",
                 "power_w": f"{row.power_w:.6f}",
+                "delta_energy_wh": f"{row.delta_energy_wh:.9f}",
                 "cumulative_energy_wh": f"{row.cumulative_energy_wh:.9f}",
             }
         )
