@@ -13,16 +13,5 @@ Restart=on-failure
 RestartSec=2
 Environment=PYTHONUNBUFFERED=1
 
-
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/home/vyom/ina219-power
-ExecStart=/home/vyom/ina219-power/.venv/bin/python -m ina219_power.main --config /home/vyom/ina219-power/config.json --serve --http-host 0.0.0.0 --http-port 8080
-Restart=on-failure
-RestartSec=2
-Environment=PYTHONUNBUFFERED=1
-
 [Install]
 WantedBy=multi-user.target
