@@ -1,6 +1,6 @@
 # INA219 Power Monitor (Raspberry Pi)
 
-Production-ready Python project for Raspberry Pi 4B+ using an INA219 (CJMCU-219) I2C sensor to measure real-time voltage/current/power, accumulate energy (Wh), and log to daily CSV files.
+Production-ready Python project for Raspberry Pi 4B+ using an INA219 (CJMCU-219) I2C sensor to measure real-time voltage/current/power, and log to CSV files per service restart.
 
 ## Hardware wiring (typical)
 - **VCC** → 3.3V
@@ -48,7 +48,6 @@ Edit [`config.json`](config.json). Key options:
 - `shunt_ohms`: typically `0.1` on CJMCU-219 boards
 - `max_expected_amps`: calibration target (default `3.2`)
 - `log_dir`: default `./logs`
-- `max_dt_s`: clamps large time gaps for energy integration
 - `csv_rotation.max_bytes`: optional size-based rollover (in addition to daily files)
 
 ## Run manually
@@ -94,7 +93,7 @@ sudo systemctl enable --now ina219-hotspot.service
 
 ## Logs
 - Logs are written to `log_dir` (default `./logs`)
-- A new CSV is created per day: `YYYY-MM-DD.csv`
+- A new CSV is created per service restart/boot session: `YYYY-MM-DD_<session_id>.csv`
 - Optional size-based rollover creates `YYYY-MM-DD_001.csv`, etc.
 
 ## Install as a systemd service (auto-start on boot)

@@ -5,7 +5,6 @@
   "shunt_ohms": 0.1,
   "max_expected_amps": 3.2,
   "log_dir": "./logs",
-  "max_dt_s": 5.0,
   "csv_rotation": {
     "enabled": true,
     "max_bytes": 5242880

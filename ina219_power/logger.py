@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import os
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional, TextIO
 
@@ -13,8 +13,7 @@ DEFAULT_FIELDS = [
     "voltage_v",
     "current_ma",
     "power_w",
-    "delta_energy_wh",
-    "cumulative_energy_wh",
+    "total_power_w",
 ]
 
 
@@ -24,8 +23,10 @@ class LogRow:
     voltage_v: float
     current_ma: float
     power_w: float
-    delta_energy_wh: float
-    cumulative_energy_wh: float
+    # NOTE: Despite the name, this value is an energy-like cumulative quantity
+    # computed as sum(power_w * dt / 3600). It's reported as "W" only to match
+    # the user's requested numeric convention.
+    total_power_w: float
 
 
 class CSVLogger:
@@ -33,19 +34,26 @@ class CSVLogger:
         self,
         *,
         log_dir: str,
+        session_id: str,
+        session_start_utc: datetime,
         rotation_enabled: bool = True,
         max_bytes: int = 5 * 1024 * 1024,
         debug: bool = False,
     ) -> None:
         self._log_dir = Path(log_dir)
+        self._session_id = str(session_id)
         self._rotation_enabled = bool(rotation_enabled)
         self._max_bytes = int(max_bytes)
         self._debug = bool(debug)
 
-        self._current_day: Optional[date] = None
         self._fh: Optional[TextIO] = None
         self._writer: Optional[csv.DictWriter] = None
         self._current_path: Optional[Path] = None
+        # Use local date so the web tail (which keys off `date.today()`) finds the file.
+        self._session_start_date_local: date = session_start_utc.astimezone().date()
+        self._base_session_path = (
+            self._log_dir / f"{self._session_start_date_local.isoformat()}_{self._session_id}.csv"
+        )
 
     def _log(self, msg: str) -> None:
         if self._debug:
@@ -54,18 +62,14 @@ class CSVLogger:
     def _ensure_dir(self) -> None:
         self._log_dir.mkdir(parents=True, exist_ok=True)
 
-    def _base_name_for_day(self, d: date) -> str:
-        return d.isoformat()
-
-    def _pick_path_for_day(self, d: date) -> Path:
+    def _pick_path_for_session(self) -> Path:
         """
-        Pick a CSV file path for the given day.
+        Pick a CSV file path for this boot/session.
 
-        - Default: YYYY-MM-DD.csv
-        - If rotation enabled and file exists+too large: YYYY-MM-DD_001.csv, etc.
+        - Default: YYYY-MM-DD_<session_id>.csv
+        - If rotation enabled and file exists+too large: append _001, etc.
         """
-        base = self._base_name_for_day(d)
-        primary = self._log_dir / f"{base}.csv"
+        primary = self._base_session_path
         if not self._rotation_enabled:
             return primary
 
@@ -80,7 +84,9 @@ class CSVLogger:
 
         idx = 1
         while True:
-            candidate = self._log_dir / f"{base}_{idx:03d}.csv"
+            candidate = self._base_session_path.with_name(
+                f"{self._base_session_path.stem}_{idx:03d}{self._base_session_path.suffix}"
+            )
             if not candidate.exists():
                 return candidate
             try:
@@ -90,9 +96,9 @@ class CSVLogger:
                 return candidate
             idx += 1
 
-    def _open_for_day(self, d: date) -> None:
+    def _open_for_session(self) -> None:
         self._ensure_dir()
-        path = self._pick_path_for_day(d)
+        path = self._pick_path_for_session()
 
         if self._fh is not None and self._current_path == path:
             return
@@ -117,10 +123,9 @@ class CSVLogger:
 
         self._fh = fh
         self._writer = writer
-        self._current_day = d
         self._current_path = path
 
-    def _maybe_rotate(self, d: date) -> None:
+    def _maybe_rotate(self) -> None:
         if not self._rotation_enabled:
             return
         if self._fh is None or self._current_path is None:
@@ -131,17 +136,16 @@ class CSVLogger:
         except OSError:
             return
 
-        next_path = self._pick_path_for_day(d)
+        next_path = self._pick_path_for_session()
         if next_path != self._current_path:
             self._log(f"rotating CSV to {next_path}")
-            self._open_for_day(d)
+            self._open_for_session()
 
     def write_row(self, row: LogRow) -> None:
-        d = row.timestamp.date()
-        if self._current_day != d:
-            self._open_for_day(d)
+        if self._fh is None or self._writer is None or self._current_path is None:
+            self._open_for_session()
 
-        self._maybe_rotate(d)
+        self._maybe_rotate()
 
         assert self._fh is not None
         assert self._writer is not None
@@ -152,8 +156,7 @@ class CSVLogger:
                 "voltage_v": f"{row.voltage_v:.6f}",
                 "current_ma": f"{row.current_ma:.6f}",
                 "power_w": f"{row.power_w:.6f}",
-                "delta_energy_wh": f"{row.delta_energy_wh:.9f}",
-                "cumulative_energy_wh": f"{row.cumulative_energy_wh:.9f}",
+                "total_power_w": f"{row.total_power_w:.9f}",
             }
         )
 
@@ -171,6 +174,5 @@ class CSVLogger:
             finally:
                 self._fh = None
                 self._writer = None
-                self._current_day = None
                 self._current_path = None
 

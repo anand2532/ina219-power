@@ -117,10 +117,12 @@ class INA219Sensor:
                 # Adafruit INA219:
                 # - bus_voltage: volts
                 # - current: milliamps
-                # - power: milliwatts
+                # - power: milliwatts (we still compute power ourselves from V and I
+                #   to guarantee `power_w = voltage_v * current_a` matches the logged V/I)
                 bus_v = float(self._sensor.bus_voltage)
                 current_ma = float(self._sensor.current)
-                power_w = float(self._sensor.power) / 1000.0
+                current_a = current_ma / 1000.0
+                power_w = bus_v * current_a
 
                 if self._had_error:
                     self._log("recovered from previous I2C error")

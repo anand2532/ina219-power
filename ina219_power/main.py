@@ -37,7 +37,6 @@ class AppConfig:
     shunt_ohms: float
     max_expected_amps: float
     log_dir: str
-    max_dt_s: float
     rotation_enabled: bool
     rotation_max_bytes: int
 
@@ -55,7 +54,6 @@ def _config_from_dict(d: dict[str, Any]) -> AppConfig:
     shunt_ohms = float(d.get("shunt_ohms", 0.1))
     max_expected_amps = float(d.get("max_expected_amps", 3.2))
     log_dir = str(d.get("log_dir", "./logs"))
-    max_dt_s = float(d.get("max_dt_s", 5.0))
 
     rotation = d.get("csv_rotation", {}) if isinstance(d.get("csv_rotation", {}), dict) else {}
     rotation_enabled = bool(rotation.get("enabled", True))
@@ -67,8 +65,6 @@ def _config_from_dict(d: dict[str, Any]) -> AppConfig:
         raise ValueError("shunt_ohms must be > 0")
     if max_expected_amps <= 0:
         raise ValueError("max_expected_amps must be > 0")
-    if max_dt_s <= 0:
-        raise ValueError("max_dt_s must be > 0")
 
     return AppConfig(
         sampling_interval_s=interval,
@@ -77,10 +73,22 @@ def _config_from_dict(d: dict[str, Any]) -> AppConfig:
         shunt_ohms=shunt_ohms,
         max_expected_amps=max_expected_amps,
         log_dir=log_dir,
-        max_dt_s=max_dt_s,
         rotation_enabled=rotation_enabled,
         rotation_max_bytes=rotation_max_bytes,
     )
+
+
+def _read_boot_id() -> str:
+    """
+    Return a unique-ish id per Linux boot.
+
+    Used to create a separate CSV file per service restart/boot.
+    """
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip()
+    except OSError:
+        # Fallback: still unique enough for a restart session.
+        return str(int(time.time() * 1000))
 
 
 class _StopFlag:
@@ -92,20 +100,31 @@ def _fmt_ts_local(ts_unix_s: float) -> str:
     return datetime.fromtimestamp(ts_unix_s).astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _print_reading(reading: INA219Reading, energy_wh: float) -> None:
+def _print_reading(reading: INA219Reading) -> None:
+    ts = _fmt_ts_local(reading.timestamp_unix_s)
+    print(
+        f"{ts} | "
+        f"V={reading.bus_voltage_v:6.3f} V | "
+        f"I={reading.current_ma:8.3f} mA | "
+        f"P={reading.power_w:7.3f} W",
+        flush=True,
+    )
+
+
+def _print_reading_with_total(reading: INA219Reading, total_power_w: float) -> None:
     ts = _fmt_ts_local(reading.timestamp_unix_s)
     print(
         f"{ts} | "
         f"V={reading.bus_voltage_v:6.3f} V | "
         f"I={reading.current_ma:8.3f} mA | "
         f"P={reading.power_w:7.3f} W | "
-        f"E={energy_wh:10.6f} Wh",
+        f"T={total_power_w:.6f} W",
         flush=True,
     )
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="INA219 power monitor (voltage/current/power + energy + CSV logs)")
+    parser = argparse.ArgumentParser(description="INA219 power monitor (voltage/current/power + CSV logs)")
     parser.add_argument("--config", default="./config.json", help="Path to config.json")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--interval", type=float, default=None, help="Override sampling interval in seconds")
@@ -140,8 +159,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         max_expected_amps=cfg.max_expected_amps,
         debug=debug,
     )
+
+    session_start_utc = datetime.now(timezone.utc)
+    # Ensure uniqueness even if the service is restarted multiple times in one boot.
+    session_id = f"{_read_boot_id()[:8]}_{int(session_start_utc.timestamp())}"
     logger = CSVLogger(
         log_dir=cfg.log_dir,
+        session_id=session_id,
+        session_start_utc=session_start_utc,
         rotation_enabled=cfg.rotation_enabled,
         max_bytes=cfg.rotation_max_bytes,
         debug=debug,
@@ -171,7 +196,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     signal.signal(signal.SIGINT, _handle_stop)
     signal.signal(signal.SIGTERM, _handle_stop)
 
-    energy_wh = 0.0
+    total_power_w = 0.0
     last_mono = time.monotonic()
 
     try:
@@ -179,20 +204,21 @@ def main(argv: Optional[list[str]] = None) -> int:
             loop_start = time.monotonic()
             dt = loop_start - last_mono
             last_mono = loop_start
-
             if dt < 0:
                 dt = 0
-            if dt > cfg.max_dt_s:
-                if debug:
-                    print(f"[main] large dt={dt:.3f}s clamped to {cfg.max_dt_s:.3f}s", flush=True)
-                dt = cfg.max_dt_s
-
+            # Clamp dt to avoid huge jumps after long sleeps / stalls.
+            # (Uses sampling interval as a scale.)
+            max_dt = max(1.0, cfg.sampling_interval_s * 10.0)
+            if dt > max_dt:
+                dt = max_dt
             try:
                 reading = sensor.read()
-                delta_energy_wh = reading.power_w * dt / 3600.0
-                energy_wh += delta_energy_wh
-
-                _print_reading(reading, energy_wh)
+                # Integrate instantaneous power over elapsed time.
+                # Convention: total_power_w is computed as:
+                #   total += P(W) * dt(s) / 3600
+                # so that constant 12W for 1 hour gives total ~= 12.
+                total_power_w += reading.power_w * dt / 3600.0
+                _print_reading_with_total(reading, total_power_w)
 
                 logger.write_row(
                     LogRow(
@@ -200,8 +226,7 @@ def main(argv: Optional[list[str]] = None) -> int:
                         voltage_v=reading.bus_voltage_v,
                         current_ma=reading.current_ma,
                         power_w=reading.power_w,
-                        delta_energy_wh=delta_energy_wh,
-                        cumulative_energy_wh=energy_wh,
+                        total_power_w=total_power_w,
                     )
                 )
             except Exception as e:  # noqa: BLE001
