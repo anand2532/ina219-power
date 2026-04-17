@@ -111,14 +111,28 @@ def _print_reading(reading: INA219Reading) -> None:
     )
 
 
-def _print_reading_with_total(reading: INA219Reading, total_power_w: float) -> None:
+def _print_reading_with_total(
+    reading: INA219Reading,
+    *,
+    delta_t_s: float,
+    delta_charge_mah_signed: float,
+    delta_charge_mah_added: float,
+    total_charge_mah_net: float,
+    total_charge_mah_added: float,
+    total_energy_wh: float,
+) -> None:
     ts = _fmt_ts_local(reading.timestamp_unix_s)
     print(
         f"{ts} | "
         f"V={reading.bus_voltage_v:6.3f} V | "
         f"I={reading.current_ma:8.3f} mA | "
         f"P={reading.power_w:7.3f} W | "
-        f"T={total_power_w:.6f} W",
+        f"dT={delta_t_s:5.3f} s | "
+        f"dQ={delta_charge_mah_signed:+.6f} mAh | "
+        f"dQ+={delta_charge_mah_added:.6f} mAh | "
+        f"Qnet={total_charge_mah_net:+.6f} mAh | "
+        f"Qadd={total_charge_mah_added:.6f} mAh | "
+        f"E={total_energy_wh:.6f} Wh",
         flush=True,
     )
 
@@ -196,7 +210,9 @@ def main(argv: Optional[list[str]] = None) -> int:
     signal.signal(signal.SIGINT, _handle_stop)
     signal.signal(signal.SIGTERM, _handle_stop)
 
-    total_power_w = 0.0
+    total_energy_wh = 0.0
+    total_charge_mah_net = 0.0
+    total_charge_mah_added = 0.0
     last_mono = time.monotonic()
 
     try:
@@ -214,19 +230,39 @@ def main(argv: Optional[list[str]] = None) -> int:
             try:
                 reading = sensor.read()
                 # Integrate instantaneous power over elapsed time.
-                # Convention: total_power_w is computed as:
+                # Convention: total_energy_wh is computed as:
                 #   total += P(W) * dt(s) / 3600
                 # so that constant 12W for 1 hour gives total ~= 12.
-                total_power_w += reading.power_w * dt / 3600.0
-                _print_reading_with_total(reading, total_power_w)
+                delta_energy_wh = reading.power_w * dt / 3600.0
+                total_energy_wh += delta_energy_wh
+                delta_charge_mah_signed = reading.current_ma * dt / 3600.0
+                delta_charge_mah_added = max(delta_charge_mah_signed, 0.0)
+                total_charge_mah_net += delta_charge_mah_signed
+                total_charge_mah_added += delta_charge_mah_added
+                _print_reading_with_total(
+                    reading,
+                    delta_t_s=dt,
+                    delta_charge_mah_signed=delta_charge_mah_signed,
+                    delta_charge_mah_added=delta_charge_mah_added,
+                    total_charge_mah_net=total_charge_mah_net,
+                    total_charge_mah_added=total_charge_mah_added,
+                    total_energy_wh=total_energy_wh,
+                )
 
                 logger.write_row(
                     LogRow(
                         timestamp=datetime.now(timezone.utc).astimezone(),
+                        delta_t_s=dt,
                         voltage_v=reading.bus_voltage_v,
                         current_ma=reading.current_ma,
                         power_w=reading.power_w,
-                        total_power_w=total_power_w,
+                        delta_energy_wh=delta_energy_wh,
+                        total_energy_wh=total_energy_wh,
+                        delta_charge_mah_signed=delta_charge_mah_signed,
+                        delta_charge_mah_added=delta_charge_mah_added,
+                        total_charge_mah_net=total_charge_mah_net,
+                        total_charge_mah_added=total_charge_mah_added,
+                        total_power_w=total_energy_wh,
                     )
                 )
             except Exception as e:  # noqa: BLE001
