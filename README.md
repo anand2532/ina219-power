@@ -95,6 +95,23 @@ sudo systemctl enable --now ina219-hotspot.service
 - Logs are written to `log_dir` (default `./logs`)
 - A new CSV is created per service restart/boot session: `YYYY-MM-DD_<session_id>.csv`
 - Optional size-based rollover creates `YYYY-MM-DD_001.csv`, etc.
+- CSV now includes incremental and cumulative battery-capacity terms:
+  - `delta_t_s`: elapsed seconds for this sample
+  - `delta_energy_wh`: incremental energy this sample (`power_w * delta_t_s / 3600`)
+  - `total_energy_wh`: cumulative energy for this run
+  - `delta_charge_mah_signed`: incremental charge this sample (`current_ma * delta_t_s / 3600`, signed)
+  - `delta_charge_mah_added`: positive-only incremental charge (`max(delta_charge_mah_signed, 0)`)
+  - `total_charge_mah_net`: cumulative signed charge for this run
+  - `total_charge_mah_added`: cumulative positive-only charge added for this run
+  - `total_power_w`: legacy alias of cumulative energy (same numeric value as `total_energy_wh`)
+
+### Battery capacity from CSV
+- **What was added at each sample**: use `delta_charge_mah_added`
+- **Total added by the end of file**: use the last row `total_charge_mah_added`
+- **Net battery change (charge - discharge)**: use the last row `total_charge_mah_net`
+- **Convert mAh to Ah**: `Ah = mAh / 1000`
+- **Estimate SOC gain (%) for known battery capacity**:
+  - `soc_gain_percent = (total_charge_mah_added / battery_nominal_mah) * 100`
 
 ## Install as a systemd service (auto-start on boot)
 
