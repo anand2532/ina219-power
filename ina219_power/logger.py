@@ -10,9 +10,16 @@ from typing import Optional, TextIO
 
 DEFAULT_FIELDS = [
     "timestamp",
+    "delta_t_s",
     "voltage_v",
     "current_ma",
     "power_w",
+    "delta_energy_wh",
+    "total_energy_wh",
+    "delta_charge_mah_signed",
+    "delta_charge_mah_added",
+    "total_charge_mah_net",
+    "total_charge_mah_added",
     "total_power_w",
 ]
 
@@ -20,9 +27,21 @@ DEFAULT_FIELDS = [
 @dataclass(frozen=True)
 class LogRow:
     timestamp: datetime
+    delta_t_s: float
     voltage_v: float
     current_ma: float
     power_w: float
+    delta_energy_wh: float
+    total_energy_wh: float
+    # Signed coulomb count for this sample:
+    # positive => battery gained charge, negative => discharged.
+    delta_charge_mah_signed: float
+    # Positive-only charge gained this sample (negative values clamped to 0).
+    delta_charge_mah_added: float
+    # Running signed coulomb count over session.
+    total_charge_mah_net: float
+    # Running positive-only charge gained over session.
+    total_charge_mah_added: float
     # NOTE: Despite the name, this value is an energy-like cumulative quantity
     # computed as sum(power_w * dt / 3600). It's reported as "W" only to match
     # the user's requested numeric convention.
@@ -153,9 +172,16 @@ class CSVLogger:
         self._writer.writerow(
             {
                 "timestamp": row.timestamp.isoformat(timespec="seconds"),
+                "delta_t_s": f"{row.delta_t_s:.6f}",
                 "voltage_v": f"{row.voltage_v:.6f}",
                 "current_ma": f"{row.current_ma:.6f}",
                 "power_w": f"{row.power_w:.6f}",
+                "delta_energy_wh": f"{row.delta_energy_wh:.9f}",
+                "total_energy_wh": f"{row.total_energy_wh:.9f}",
+                "delta_charge_mah_signed": f"{row.delta_charge_mah_signed:.9f}",
+                "delta_charge_mah_added": f"{row.delta_charge_mah_added:.9f}",
+                "total_charge_mah_net": f"{row.total_charge_mah_net:.9f}",
+                "total_charge_mah_added": f"{row.total_charge_mah_added:.9f}",
                 "total_power_w": f"{row.total_power_w:.9f}",
             }
         )
